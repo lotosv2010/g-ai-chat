@@ -16,22 +16,23 @@ function App() {
   const [systemPrompt, setSystemPrompt] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [currentConfig, setCurrentConfig] = useState<OllamaConfig>(OLLAMA_CONFIG);
-
-  // 从 localStorage 读取配置
-  useEffect(() => {
+  const [currentConfig, setCurrentConfig] = useState<OllamaConfig>(() => {
     const savedConfig = localStorage.getItem('ollamaConfig');
     if (savedConfig) {
       try {
-        const config = JSON.parse(savedConfig);
-        setCurrentConfig(config);
-        // 更新 langchain 的配置
-        updateOllamaConfig(config);
+        return JSON.parse(savedConfig) as OllamaConfig;
       } catch {
         // 解析失败，使用默认配置
+        return OLLAMA_CONFIG;
       }
     }
-  }, []);
+    return OLLAMA_CONFIG;
+  });
+
+  // currentConfig 变化时同步到 langchain
+  useEffect(() => {
+    updateOllamaConfig(currentConfig);
+  }, [currentConfig]);
 
   // 使用聊天 hook
   const { messages, isLoading, error, streamingResponse, streamingThinking, extractedUser, sendMessage, clearMessages } = useChat();
