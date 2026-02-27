@@ -2,7 +2,7 @@ import { ChatOllama } from '@langchain/ollama';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { OLLAMA_CONFIG, type OllamaConfig } from '../types';
+import { OLLAMA_CONFIG, type OllamaConfig, type ToolCallResult } from '../types';
 import { UserSchema, type User } from '../schemas/zod';
 import { extractUserInfo } from '../tools/extractUserInfo';
 import { getWeatherByCity, type WeatherData } from '../tools/getWeather';
@@ -12,14 +12,6 @@ export interface StreamChunk {
   type: 'thinking' | 'content' | 'tool_call';
   content: string;
   toolCall?: ToolCallResult;
-}
-
-// 工具调用结果类型
-export interface ToolCallResult {
-  toolName: string;
-  success: boolean;
-  result?: User | WeatherData;
-  error?: string;
 }
 
 // 当前使用的配置（支持动态更新）
@@ -133,9 +125,7 @@ export const sendMessage = async (
   const response = await ollama.invoke(messages);
   const responseText = getContentAsString(response.content);
 
-  const finalContent = responseText;
-
-  return { thinking: undefined, content: finalContent };
+  return { thinking: undefined, content: responseText };
 };
 
 /**
@@ -410,10 +400,9 @@ ${showThinking ? '\n\n请先思考如何提取这些信息。' : ''}`;
     }
 
     // 解析 JSON 结果
-    const finalContent = fullText
-    console.log('📄 [Agent Stream] finalContent:', finalContent);
-    const jsonMatch = finalContent.match(/```json\n?([\s\S]*?)```/) || finalContent.match(/\{[\s\S]*\}/);
-    const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : finalContent;
+    console.log('📄 [Agent Stream] finalContent:', fullText);
+    const jsonMatch = fullText.match(/```json\n?([\s\S]*?)```/) || fullText.match(/\{[\s\S]*\}/);
+    const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : fullText;
 
     const userData = JSON.parse(jsonStr);
 

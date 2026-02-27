@@ -1,4 +1,3 @@
-import React from 'react';
 import type { OllamaConfig } from '../types';
 
 interface SidebarProps {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useChat } from './hooks/useChat';
 import { ChatContainer } from './components/ChatContainer';
 import { ChatInput } from './components/ChatInput';
@@ -31,9 +31,13 @@ function App() {
   });
 
   // currentConfig 变化时同步到 langchain
+  const handleConfigChange = useCallback((config: OllamaConfig) => {
+    updateOllamaConfig(config);
+  }, []);
+
   useEffect(() => {
-    updateOllamaConfig(currentConfig);
-  }, [currentConfig]);
+    handleConfigChange(currentConfig);
+  }, [currentConfig, handleConfigChange]);
 
   // 使用聊天 hook
   const { messages, isLoading, error, streamingResponse, streamingThinking, extractedUser, toolCallResult, sendMessage, clearMessages } = useChat();
@@ -49,10 +53,10 @@ function App() {
   };
 
   // 保存配置
-  const handleSaveConfig = (config: OllamaConfig) => {
+  const handleSaveConfig = useCallback((config: OllamaConfig) => {
     setCurrentConfig(config);
-    updateOllamaConfig(config);
-  };
+    handleConfigChange(config);
+  }, [handleConfigChange]);
 
   return (
     <div className="app">
