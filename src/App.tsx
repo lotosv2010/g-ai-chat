@@ -42,7 +42,7 @@ function App() {
   const handleSendMessage = async (message: string) => {
     await sendMessage(message, {
       systemPrompt: systemPrompt || undefined,
-      stream: enableStream && !useSmartTool, // 智能工具调用时不使用流式
+      stream: enableStream,
       useAgent,
       useSmartTool,
     });

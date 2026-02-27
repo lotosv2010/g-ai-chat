@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { ChatMessage } from '../types';
-import { sendMessage, chatStream, executeAgentStream, smartChat, type ToolCallResult } from '../lib/langchain';
+import { sendMessage, chatStream, executeAgentStream, smartChatStream, type ToolCallResult } from '../lib/langchain';
 import type { User } from '../schemas/zod';
 
 export const useChat = () => {
@@ -49,17 +49,30 @@ export const useChat = () => {
       let thinking = '';
 
       if (options?.useSmartTool) {
-        // 智能工具调用模式
-        console.log('🤖 [Send Message] 智能工具调用模式');
-        const result = await smartChat(userMessage, options.systemPrompt);
-        thinking = result.thinking || '';
-        response = result.content;
-
-        if (result.toolCall) {
-          setToolCallResult(result.toolCall);
-          // 如果是用户信息提取，也设置到 extractedUser
-          if (result.toolCall.success && result.toolCall.toolName === 'extractUserInfo') {
-            setExtractedUser(result.toolCall.result as User);
+        // 智能工具调用模式 - 流式版本
+        console.log('🤖 [Send Message] 智能工具调用模式（流式）');
+        const stream = smartChatStream(userMessage, options.systemPrompt);
+        for await (const chunk of stream) {
+          if (chunk.type === 'thinking') {
+            thinking += chunk.content;
+            setStreamingThinking(thinking);
+          } else if (chunk.type === 'content') {
+            response += chunk.content;
+            setStreamingResponse(response);
+          } else if (chunk.type === 'tool_call' && chunk.toolCall) {
+            setToolCallResult(chunk.toolCall);
+            // 如果是用户信息提取，也设置到 extractedUser
+            if (chunk.toolCall.success && chunk.toolCall.toolName === 'extractUserInfo') {
+              setExtractedUser(chunk.toolCall.result as User);
+            }
+          }
+        }
+        // 获取最终结果
+        const final = await stream.next();
+        if (final.done && final.value?.toolCall) {
+          setToolCallResult(final.value.toolCall);
+          if (final.value.toolCall.success && final.value.toolCall.toolName === 'extractUserInfo') {
+            setExtractedUser(final.value.toolCall.result as User);
           }
         }
       } else if (options?.useAgent) {
