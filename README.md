@@ -41,6 +41,10 @@ src/
 │   └── langchain.ts         # LangChain 集成
 ├── schemas/                 # Zod Schemas
 │   └── zod.ts               # 数据验证 Schema
+├── tools/                   # 工具函数
+│   ├── extractUserInfo.ts   # 用户信息提取工具
+│   ├── getWeather.ts        # 天气查询工具
+│   └── index.ts             # 工具统一导出
 ├── types/                   # TypeScript 类型
 │   └── index.ts             # 全局类型定义
 ├── App.tsx                  # 主应用组件
@@ -86,6 +90,10 @@ VITE_OLLAMA_MODEL=qwen3-coder:480b-cloud
 VITE_OLLAMA_TEMPERATURE=0.7
 VITE_OLLAMA_MAX_TOKENS=1000
 VITE_SHOW_THINKING=true
+
+# 和风天气配置
+VITE_QWEATHER_API_KEY=your_api_key_here
+VITE_QWEATHER_API_HOST=https://devapi.qweatherapi.com
 ```
 
 ### 4. 运行开发服务器
@@ -132,6 +140,24 @@ pnpm preview
 
 ```text
 我叫张三，今年25岁，邮箱是zhangsan@example.com，手机号13800138000，住在北京朝阳区建国路88号，是软件工程师，喜欢编程、阅读和旅行。
+```
+
+### 智能工具调用
+
+1. 在侧边栏开启「智能工具调用」（默认已启用）
+2. 输入问题，系统会自动识别是否需要调用工具
+3. 支持的工具：
+   - **天气查询**：输入"北京天气"、"上海现在多少度"等
+   - **用户信息提取**：输入包含个人信息的描述
+
+**示例输入：**
+
+```text
+北京的天气怎么样？
+```
+
+```text
+我叫李四，今年30岁，是前端工程师
 ```
 
 ## 📚 API 文档
@@ -183,6 +209,149 @@ for await (const chunk of stream) {
 // 获取最终结果
 const final = await stream.next();
 console.log('提取的用户信息:', final.value?.result);
+```
+
+### smartChat
+
+智能聊天 - 自动检测并调用工具
+
+```typescript
+import { smartChat } from './lib/langchain';
+
+const result = await smartChat("北京的天气怎么样？");
+
+console.log('AI 回复:', result.content);
+if (result.toolCall) {
+  console.log('调用的工具:', result.toolCall.toolName);
+  console.log('工具是否成功:', result.toolCall.success);
+}
+```
+
+## 🛠 工具函数
+
+项目提供了两个实用的工具函数，可以方便地集成到你的应用中。
+
+### 用户信息提取工具 (`extractUserInfo`)
+
+从用户的自然语言描述中提取结构化的用户信息。
+
+```typescript
+import { extractUserInfo } from './tools';
+
+const userText = '我叫张三，今年25岁，邮箱是zhangsan@example.com，手机号13800138000，住在北京朝阳区建国路88号，是软件工程师，喜欢编程、阅读和旅行。';
+
+const userInfo = await extractUserInfo({ content: userText });
+
+if (userInfo) {
+  console.log('姓名:', userInfo.name);
+  console.log('年龄:', userInfo.age);
+  console.log('邮箱:', userInfo.email);
+  console.log('手机号:', userInfo.phone);
+  console.log('地址:', userInfo.address);
+  console.log('职业:', userInfo.occupation);
+  console.log('兴趣爱好:', userInfo.hobbies);
+}
+```
+
+**返回数据结构：**
+
+```typescript
+{
+  name: string;        // 姓名
+  age: number;         // 年龄
+  email: string;       // 邮箱
+  phone: string;       // 手机号
+  address: {
+    city: string;      // 城市
+    district: string;  // 区县
+    street: string;    // 街道
+  };
+  occupation?: string; // 职业（可选）
+  hobbies: string[];   // 兴趣爱好数组
+}
+```
+
+### 天气查询工具 (`getWeatherByCity`)
+
+调用和风天气 API 查询指定城市的实时天气。
+
+```typescript
+import { getWeatherByCity } from './tools';
+
+// 方法1: 使用城市名称
+const weather = await getWeatherByCity({ location: '北京' });
+
+// 方法2: 使用城市ID（注意：当前版本仅支持城市名称查询）
+// const weather = await getWeatherByCity({ location: '101010100' });
+
+if (weather) {
+  console.log('城市:', weather.location.name);
+  console.log('温度:', weather.now.temp, '°C');
+  console.log('天气:', weather.now.text);
+  console.log('体感温度:', weather.now.feelsLike, '°C');
+  console.log('湿度:', weather.now.humidity, '%');
+  console.log('风向:', weather.now.windDir);
+  console.log('风力:', weather.now.windScale);
+}
+```
+
+**返回数据结构：**
+
+```typescript
+{
+  location: {
+    name: string;    // 城市名称
+    id: string;      // 城市ID
+    lat: number;     // 纬度
+    lon: number;     // 经度
+    adm1: string;    // 一级行政区域（省份）
+    adm2: string;    // 二级行政区域（城市/区县）
+    country: string; // 国家
+  };
+  now: {
+    temp: number;        // 实时气温（摄氏度）
+    feelsLike: number;   // 体感温度（摄氏度）
+    text: string;        // 天气现象文字（如：晴、多云、小雨等）
+    windDir: string;     // 风向（如：东北风、西风等）
+    windScale: string;   // 风力等级（如：3级、5-6级等）
+    windSpeed: number;   // 风速（公里/小时）
+    humidity: number;     // 相对湿度（%）
+    precip: number;       // 当前小时累计降水量（毫米）
+    pressure: number;     // 大气压强（百帕）
+    vis: number;          // 能见度（公里）
+    obsTime: string;      // 数据观测时间
+    fxLink: string;       // 天气预报网页链接
+  };
+}
+```
+
+**常见城市 ID 参考：**
+
+| 城市 | 城市ID |
+|------|--------|
+| 北京 | 101010100 |
+| 上海 | 101020100 |
+| 广州 | 101280101 |
+| 深圳 | 101280601 |
+| 杭州 | 101210101 |
+| 南京 | 101190101 |
+| 武汉 | 101200101 |
+| 成都 | 101270101 |
+
+**配置说明：**
+
+天气查询工具通过 Vite 开发服务器代理访问和风天气 API，无需额外配置。
+
+API Key 已在 `vite.config.ts` 中配置，开发服务器会自动添加必要的请求头。
+
+**注意：** 此功能仅适用于开发环境。生产环境部署时，需要实现后端 API 服务来代理和风天气 API 请求。
+
+**统一导入：**
+
+可以通过 `src/tools/index.ts` 统一导入所有工具：
+
+```typescript
+import { extractUserInfo, getWeatherByCity } from './tools';
 ```
 
 ## 🤔 常见问题

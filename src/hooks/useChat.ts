@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { ChatMessage } from '../types';
-import { sendMessage, chatStream, executeAgentStream } from '../lib/langchain';
+import { sendMessage, chatStream, executeAgentStream, smartChat, type ToolCallResult } from '../lib/langchain';
 import type { User } from '../schemas/zod';
 
 export const useChat = () => {
@@ -10,6 +10,7 @@ export const useChat = () => {
   const [streamingResponse, setStreamingResponse] = useState<string>('');
   const [streamingThinking, setStreamingThinking] = useState<string>('');
   const [extractedUser, setExtractedUser] = useState<User | null>(null);
+  const [toolCallResult, setToolCallResult] = useState<ToolCallResult | null>(null);
 
   // 添加消息到聊天记录
   const addMessage = useCallback((role: ChatMessage['role'], content: string, thinking?: string) => {
@@ -28,9 +29,10 @@ export const useChat = () => {
   const sendMessageToAI = useCallback(async (
     userMessage: string,
     options?: {
-      systemPrompt?: string;    // 系统提示词
-      stream?: boolean;         // 是否流式输出
-      useAgent?: boolean;       // 是否使用 Agent 模式
+    systemPrompt?: string;    // 系统提示词
+    stream?: boolean;         // 是否流式输出
+    useAgent?: boolean;       // 是否使用 Agent 模式
+    useSmartTool?: boolean;   // 是否使用智能工具调用
     }
   ) => {
     setIsLoading(true);
@@ -38,6 +40,7 @@ export const useChat = () => {
     setStreamingResponse('');
     setStreamingThinking('');
     setExtractedUser(null);
+    setToolCallResult(null);
 
     addMessage('user', userMessage);
 
@@ -45,7 +48,21 @@ export const useChat = () => {
       let response = '';
       let thinking = '';
 
-      if (options?.useAgent) {
+      if (options?.useSmartTool) {
+        // 智能工具调用模式
+        console.log('🤖 [Send Message] 智能工具调用模式');
+        const result = await smartChat(userMessage, options.systemPrompt);
+        thinking = result.thinking || '';
+        response = result.content;
+
+        if (result.toolCall) {
+          setToolCallResult(result.toolCall);
+          // 如果是用户信息提取，也设置到 extractedUser
+          if (result.toolCall.success && result.toolCall.toolName === 'extractUserInfo') {
+            setExtractedUser(result.toolCall.result as User);
+          }
+        }
+      } else if (options?.useAgent) {
         // Agent 模式：提取用户信息
         console.log('🔍 [Send Message] Agent 模式');
         const agentStream = executeAgentStream(userMessage);
@@ -111,6 +128,7 @@ export const useChat = () => {
     streamingResponse,
     streamingThinking,
     extractedUser,
+    toolCallResult,
     sendMessage: sendMessageToAI,
     clearMessages,
   };

@@ -5,14 +5,17 @@ interface SidebarProps {
   enableStream: boolean;
   enableThinking: boolean;
   useAgent: boolean;
+  useSmartTool: boolean;
   systemPrompt: string;
   messageCount: number;
+  toolCallResult?: { toolName: string; success: boolean } | null;
   isCollapsed: boolean;
   ollamaConfig: OllamaConfig;
   onToggleCollapse: () => void;
   onEnableStreamChange: (enabled: boolean) => void;
   onEnableThinkingChange: (enabled: boolean) => void;
   onUseAgentChange: (enabled: boolean) => void;
+  onUseSmartToolChange: (enabled: boolean) => void;
   onSystemPromptChange: (prompt: string) => void;
 }
 
@@ -23,14 +26,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   enableStream,
   enableThinking,
   useAgent,
+  useSmartTool,
   systemPrompt,
   messageCount,
+  toolCallResult,
   isCollapsed,
   ollamaConfig,
   onToggleCollapse,
   onEnableStreamChange,
   onEnableThinkingChange,
   onUseAgentChange,
+  onUseSmartToolChange,
   onSystemPromptChange,
 }) => {
   return (
@@ -67,6 +73,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           hint="启用后将从用户输入中提取结构化的用户信息"
         />
 
+        <ToggleSection
+          title="智能工具调用"
+          checked={useSmartTool}
+          onChange={onUseSmartToolChange}
+          label="自动识别并调用工具"
+          hint="自动检测天气查询、用户信息提取等场景"
+        />
+
         <TextareaSection
           title="系统提示词"
           value={systemPrompt}
@@ -83,6 +97,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           enableStream={enableStream}
           enableThinking={enableThinking}
           useAgent={useAgent}
+          useSmartTool={useSmartTool}
+          toolCallResult={toolCallResult}
         />
       </div>
     </aside>
@@ -151,7 +167,9 @@ const StatsSection: React.FC<{
   enableStream: boolean;
   enableThinking: boolean;
   useAgent: boolean;
-}> = ({ messageCount, enableStream, enableThinking, useAgent }) => (
+  useSmartTool: boolean;
+  toolCallResult?: { toolName: string; success: boolean } | null;
+}> = ({ messageCount, enableStream, enableThinking, useAgent, useSmartTool, toolCallResult }) => (
   <div className="sidebar-section">
     <h3>统计</h3>
     <div className="stats">
@@ -159,6 +177,12 @@ const StatsSection: React.FC<{
       <p>流式输出: {enableStream ? '已启用' : '已禁用'}</p>
       <p>思考过程: {enableThinking ? '已启用' : '已禁用'}</p>
       <p>Agent 模式: {useAgent ? '已启用' : '已禁用'}</p>
+      <p>智能工具: {useSmartTool ? '已启用' : '已禁用'}</p>
+      {toolCallResult && (
+        <p className="tool-call-status">
+          最近工具: {toolCallResult.toolName} ({toolCallResult.success ? '✅ 成功' : '❌ 失败'})
+        </p>
+      )}
     </div>
   </div>
 );

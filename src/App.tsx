@@ -13,6 +13,7 @@ function App() {
   // 状态管理
   const [enableStream, setEnableStream] = useState(true);
   const [useAgent, setUseAgent] = useState(false);
+  const [useSmartTool, setUseSmartTool] = useState(true); // 默认启用智能工具调用
   const [systemPrompt, setSystemPrompt] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -35,14 +36,15 @@ function App() {
   }, [currentConfig]);
 
   // 使用聊天 hook
-  const { messages, isLoading, error, streamingResponse, streamingThinking, extractedUser, sendMessage, clearMessages } = useChat();
+  const { messages, isLoading, error, streamingResponse, streamingThinking, extractedUser, toolCallResult, sendMessage, clearMessages } = useChat();
 
   // 发送消息处理
   const handleSendMessage = async (message: string) => {
     await sendMessage(message, {
       systemPrompt: systemPrompt || undefined,
-      stream: enableStream,
+      stream: enableStream && !useSmartTool, // 智能工具调用时不使用流式
       useAgent,
+      useSmartTool,
     });
   };
 
@@ -66,14 +68,17 @@ function App() {
         enableStream={enableStream}
         enableThinking={currentConfig.showThinking}
         useAgent={useAgent}
+        useSmartTool={useSmartTool}
         systemPrompt={systemPrompt}
         messageCount={messages.length}
+        toolCallResult={toolCallResult}
         isCollapsed={isSidebarCollapsed}
         ollamaConfig={currentConfig}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         onEnableStreamChange={setEnableStream}
         onEnableThinkingChange={() => {}}
         onUseAgentChange={setUseAgent}
+        onUseSmartToolChange={setUseSmartTool}
         onSystemPromptChange={setSystemPrompt}
       />
 

@@ -2,11 +2,21 @@ import { ChatOllama } from '@langchain/ollama';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { OLLAMA_CONFIG, type OllamaConfig } from '../types';
 import { UserSchema, type User } from '../schemas/zod';
+import { extractUserInfo } from '../tools/extractUserInfo';
+import { getWeatherByCity, type WeatherData } from '../tools/getWeather';
 
 // 流式响应块类型
 export interface StreamChunk {
   type: 'thinking' | 'content';
   content: string;
+}
+
+// 工具调用结果类型
+export interface ToolCallResult {
+  toolName: string;
+  success: boolean;
+  result?: User | WeatherData;
+  error?: string;
 }
 
 // 当前使用的配置（支持动态更新）
@@ -150,6 +160,157 @@ export const chatStream = async function* (
     console.error('❌ [Chat Stream] 错误:', error);
     throw new Error('流式响应失败');
   }
+};
+
+/**
+ * 智能工具调用 - 检测用户意图并调用相应工具
+ * @param content 用户输入内容
+ * @returns 工具调用结果，如果没有匹配的工具则返回 null
+ */
+export async function detectAndCallTool(content: string): Promise<ToolCallResult | null> {
+  const ollama = new ChatOllama({
+    baseUrl: OLLAMA_CONFIG.baseUrl,
+    model: OLLAMA_CONFIG.model,
+    temperature: 0.1, // 降低温度以获得更稳定的意图识别
+  });
+
+  const systemPrompt = `你是一个智能工具路由助手。根据用户的输入，判断是否需要调用工具。
+
+如果用户询问天气（包含：天气、气温、温度、下雨、晴天、多云等关键词），请返回：WEATHER
+如果用户提供个人信息（包含：我叫、今年岁、邮箱、手机、住在、地址、职业等关键词），请返回：EXTRACT_USER
+其他情况，请返回：NONE
+
+只返回工具类型，不要解释原因。`;
+
+  try {
+    const messages = [
+      new SystemMessage(systemPrompt),
+      new HumanMessage(content),
+    ];
+
+    const response = await ollama.invoke(messages);
+    const responseText = String(response.content).trim().toUpperCase();
+
+    console.log('🔍 [Tool Detection] 检测结果:', responseText);
+
+    // 根据检测结果调用相应工具
+    if (responseText.includes('WEATHER')) {
+      console.log('🌤️ [Tool Call] 调用天气查询工具');
+      // 提取城市名称
+      const cityPrompt = `从用户输入中提取城市名称，只返回城市名称：${content}`;
+      const cityMessages = [new SystemMessage('只返回城市名称，不要其他文字'), new HumanMessage(cityPrompt)];
+      const cityResponse = await ollama.invoke(cityMessages);
+      const cityName = String(cityResponse.content).trim();
+
+      const weatherData = await getWeatherByCity({ location: cityName });
+
+      if (weatherData) {
+        return {
+          toolName: 'getWeather',
+          success: true,
+          result: weatherData,
+        };
+      } else {
+        return {
+          toolName: 'getWeather',
+          success: false,
+          error: '查询天气失败，请检查城市名称是否正确',
+        };
+      }
+    } else if (responseText.includes('EXTRACT_USER')) {
+      console.log('👤 [Tool Call] 调用用户信息提取工具');
+      const userInfo = await extractUserInfo({ content });
+
+      if (userInfo) {
+        return {
+          toolName: 'extractUserInfo',
+          success: true,
+          result: userInfo,
+        };
+      } else {
+        return {
+          toolName: 'extractUserInfo',
+          success: false,
+          error: '提取用户信息失败，请提供更详细的信息',
+        };
+      }
+    }
+
+    return null; // 没有匹配的工具
+  } catch (error) {
+    console.error('❌ [Tool Detection] 错误:', error);
+    return null;
+  }
+}
+
+/**
+ * 智能聊天 - 自动检测并调用工具
+ * @param content 用户输入内容
+ * @param systemPrompt 系统提示词
+ * @returns AI回复，可能包含工具调用结果
+ */
+export const smartChat = async (
+  content: string,
+  systemPrompt?: string
+): Promise<{ thinking?: string; content: string; toolCall?: ToolCallResult }> => {
+  // 先检测是否需要调用工具
+  const toolResult = await detectAndCallTool(content);
+
+  if (toolResult) {
+    // 如果调用了工具，返回工具结果
+    if (toolResult.success && toolResult.result) {
+      let formattedContent = '';
+
+      if (toolResult.toolName === 'getWeather') {
+        const weather = toolResult.result as WeatherData;
+        formattedContent = `🌤️ ${weather.location.name}天气情况：
+温度：${weather.now.temp}°C（体感 ${weather.now.feelsLike}°C）
+天气：${weather.now.text}
+湿度：${weather.now.humidity}%
+风向：${weather.now.windDir}
+风力：${weather.now.windScale}
+气压：${weather.now.pressure}hPa
+能见度：${weather.now.vis}km
+降水量：${weather.now.precip}mm
+观测时间：${weather.now.obsTime}`;
+
+        // 如果有行政区划信息，添加到标题中
+        if (weather.location.adm2 || weather.location.adm1) {
+          const region = [weather.location.adm2, weather.location.adm1].filter(Boolean).join('，');
+          formattedContent = `🌤️ ${weather.location.name}（${region}）天气情况：\n` + formattedContent.substring(formattedContent.indexOf('\n') + 1);
+        }
+      } else if (toolResult.toolName === 'extractUserInfo') {
+        const user = toolResult.result as User;
+        formattedContent = `👤 用户信息：
+姓名：${user.name}
+年龄：${user.age}岁
+邮箱：${user.email}
+手机号：${user.phone}
+地址：${user.address.city} ${user.address.district} ${user.address.street}${user.occupation ? `\n职业：${user.occupation}` : ''}
+兴趣爱好：${user.hobbies.join('、')}`;
+      }
+
+      return {
+        thinking: undefined,
+        content: formattedContent,
+        toolCall: toolResult,
+      };
+    } else {
+      // 工具调用失败
+      return {
+        thinking: undefined,
+        content: toolResult.error || '工具调用失败',
+        toolCall: toolResult,
+      };
+    }
+  }
+
+  // 没有匹配的工具，使用普通聊天
+  const result = await sendMessage(content, systemPrompt);
+  return {
+    thinking: result.thinking,
+    content: result.content,
+  };
 };
 
 /**

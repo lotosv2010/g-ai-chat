@@ -26,4 +26,13 @@ export type ChatMessage = {
   timestamp: number;
   thinking?: string; // 思考过程（仅 assistant 消息有）
   isStreaming?: boolean; // 是否正在流式输出
+  toolCall?: boolean; // 是否使用了工具调用
+};
+
+// 工具调用结果类型
+export type ToolCallResult = {
+  toolName: string;
+  success: boolean;
+  result?: unknown;
+  error?: string;
 };
